@@ -9,13 +9,8 @@ from sqlalchemy import create_engine
 def get_db_config():
     config = configparser.ConfigParser()
 
-    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    config_path = os.path.join(
-        base_dir,
-        "SNU Monitoring",
-        "SNU_Dashboard",
-        "dbConfig.ini"
-    )
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    config_path = os.path.join(base_dir,"dbConfig.ini")
 
     config.read(config_path)
 
