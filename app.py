@@ -18,7 +18,6 @@ PLOTLY_CONFIG = {
     ],
 }
 
-
 # --------------------------------------------------
 # PAGE CONFIG
 # --------------------------------------------------
@@ -29,7 +28,7 @@ st.set_page_config(
 )
 
 # --------------------------------------------------
-# GLOBAL CSS (FINAL)
+# CSS
 # --------------------------------------------------
 st.markdown("""
 <style>
@@ -50,47 +49,7 @@ st.markdown("""
     border-radius:14px;
     border:1px solid #111827;
     padding:18px 20px;
-    box-shadow:0 18px 40px rgba(15,23,42,0.65);
 }
-
-/* FULL SIZE CHARTS */
-div[data-testid="stPlotlyChart"]{
-    background:#020617e6;
-    border-radius:14px;
-    padding:6px 6px;
-    border:1px solid #111827;
-    box-shadow:0 18px 40px rgba(15,23,42,0.65);
-    overflow:hidden !important;
-}
-
-/* SMALL HELP ICON */
-[data-testid="stTooltipIcon"]{
-    transform:scale(0.7);
-    margin-left:4px!important;
-}
-[data-testid="stTooltipIcon"] svg{
-    width:14px!important;
-    height:14px!important;
-}
-
-/* COMPACT TOOLBAR */
-div[data-testid="stPlotlyChart"] .modebar{
-    transform:scale(0.65);
-    transform-origin:top right;
-}
-div[data-testid="stPlotlyChart"] .modebar-btn{
-    padding:2px!important;
-    margin:0!important;
-    border-radius:6px!important;
-}
-div[data-testid="stPlotlyChart"] .modebar-btn svg{
-    width:14px!important;
-    height:14px!important;
-}
-
-/* -------------------------------------------------- */
-/* KPI BUTTONS ONLY — STACKED STYLE (SCOPED) */
-/* -------------------------------------------------- */
 
 .kpi-row button {
     height:92px !important;
@@ -99,40 +58,11 @@ div[data-testid="stPlotlyChart"] .modebar-btn svg{
     justify-content:center !important;
     align-items:center !important;
     white-space:pre-wrap !important;
-    line-height:1.2 !important;
-    text-align:center !important;
-    border-radius:14px !important;
-}
-
-.kpi-row button p{
-    margin:0 !important;
-}
-
-.kpi-row button p:first-child{
-    font-size:11px !important;
-    color:#9ca3af !important;
-    text-transform:uppercase !important;
-    letter-spacing:0.05em !important;
-}
-
-.kpi-row button p:last-child{
-    font-size:24px !important;
-    font-weight:700 !important;
-    color:#f9fafb !important;
-}
-
-.helper-text{
-    font-size:12px;
-    color:#9ca3af;
 }
 
 .section-title{
     font-size:14px;
     font-weight:600;
-}
-
-.header-right > div:first-child{
-    padding-top:0.6rem;
 }
 
 </style>
@@ -148,19 +78,10 @@ with top_col1:
         <h2 style="font-weight:600;margin-top:0.4rem;margin-bottom:0.15rem;">
             SNU Site Monitoring Dashboard
         </h2>
-        <div class="helper-text">
-            Track site outage aging and quickly drill into affected sites.
-        </div>
     """, unsafe_allow_html=True)
 
 with top_col2:
-    with st.container():
-        st.markdown('<div class="header-right">', unsafe_allow_html=True)
-        selected_date = st.date_input(
-            "Reference Date",
-            help="Select the reference date to load daily and weekly site aging metrics.",
-        )
-        st.markdown("</div>", unsafe_allow_html=True)
+    selected_date = st.date_input("Reference Date")
 
 if not selected_date:
     st.stop()
@@ -173,27 +94,27 @@ reference_ts = int(
         tzinfo=timezone.utc
     ).timestamp()
 )
-# selected_date_str = str(selected_date)
 
 # --------------------------------------------------
-# LOAD DATA
+# DATA LOADING
 # --------------------------------------------------
-with st.spinner("Loading site aging data..."):
-    counts_df = getAgingBucketCounts(reference_ts)
-    details_df = getAgingBucketDetails(reference_ts)
+@st.cache_data
+def load_data(reference_ts):
+    counts = getAgingBucketCounts(reference_ts)
+    details = getAgingBucketDetails(reference_ts)
+    return counts, details
 
-def is_empty(df):
-    return df is None or df.empty
+counts_df, details_df = load_data(reference_ts)
 
-if (is_empty(counts_df) or is_empty(details_df)):
+if counts_df.empty or details_df.empty:
     st.markdown(
-        '<div class="card" style="text-align:center;font-size:18px;font-weight:600;">No data available for the selected date.</div>',
+        '<div class="card">No data available for the selected date.</div>',
         unsafe_allow_html=True,
     )
     st.stop()
 
 # --------------------------------------------------
-# TRANSFORM DATA
+# DATA TRANSFORM
 # --------------------------------------------------
 daily_counts_df = counts_df.melt(
     id_vars=["refTimeStamp"],
@@ -216,6 +137,7 @@ bucket_map={
     "week4":">week3&<week4",
     "week5":">week4",
 }
+
 weekly_counts_df["aging_bucket"]=weekly_counts_df["aging_bucket"].map(bucket_map)
 
 bucket_order=["<week1",">week1&<week2",">week2&<week3",">week3&<week4",">week4"]
@@ -223,15 +145,12 @@ bucket_order=["<week1",">week1&<week2",">week2&<week3",">week3&<week4",">week4"]
 # --------------------------------------------------
 # CHARTS
 # --------------------------------------------------
-
 c1,c2 = st.columns(2)
 
 with c1:
-    st.markdown(
-    '<div style="margin-top:0.6rem;margin-bottom:0.2rem;" class="section-title">Daily Aging Trends</div>',
-    unsafe_allow_html=True,
-    )
+
     fig1 = go.Figure()
+
     fig1.add_trace(go.Scatter(
         x=daily_counts_df["aging_bucket"],
         y=daily_counts_df["sitecount"],
@@ -243,23 +162,21 @@ with c1:
         fill="tozeroy",
         fillcolor="rgba(59,130,246,0.15)",
     ))
+
     fig1.update_layout(
-        autosize=True,
-        height=None,
         plot_bgcolor="#020617",
         paper_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
         showlegend=False,
-        margin=dict(l=70,r=70,t=50,b=45),
+        margin=dict(l=80, r=80, t=30, b=40)
     )
+
     st.plotly_chart(fig1,use_container_width=True,config=PLOTLY_CONFIG)
 
 with c2:
-    st.markdown(
-    '<div style="margin-top:0.6rem;margin-bottom:0.2rem;" class="section-title">Weekly Aging Trends</div>',
-    unsafe_allow_html=True,
-    )
+
     fig2 = go.Figure()
+
     fig2.add_trace(go.Scatter(
         x=weekly_counts_df["aging_bucket"],
         y=weekly_counts_df["sitecount"],
@@ -271,28 +188,26 @@ with c2:
         fill="tozeroy",
         fillcolor="rgba(16,185,129,0.15)",
     ))
+
     fig2.update_layout(
-        autosize=True,
-        height=None,
         plot_bgcolor="#020617",
         paper_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
         showlegend=False,
-        margin=dict(l=70,r=70,t=50,b=45),
+        margin=dict(l=80, r=80, t=30, b=40)
     )
+
     st.plotly_chart(fig2,use_container_width=True,config=PLOTLY_CONFIG)
 
 # --------------------------------------------------
-# KPI BUTTONS (FINAL)
+# KPI BUTTONS
 # --------------------------------------------------
 if "selected_bucket" not in st.session_state:
     st.session_state.selected_bucket="<week1"
 
-selected_cat = st.session_state.selected_bucket
-
 st.markdown('<div class="kpi-row">', unsafe_allow_html=True)
 
-kpi_cols = st.columns(len(bucket_order),gap="small")
+kpi_cols = st.columns(len(bucket_order))
 
 for i,cat in enumerate(bucket_order):
 
@@ -300,8 +215,7 @@ for i,cat in enumerate(bucket_order):
         weekly_counts_df["aging_bucket"]==cat,"sitecount"
     ].sum()
 
-    safe_cat = cat.replace("<","&lt;").replace(">","&gt;")
-    display_text=f"{safe_cat}  \n{int(val)}"
+    display_text=f"{cat}  \n{int(val)}"
 
     with kpi_cols[i]:
         if st.button(display_text,key=f"kpi_btn_{cat}",use_container_width=True):
@@ -324,55 +238,54 @@ reverse_bucket_map = {
 db_bucket = reverse_bucket_map[selected_bucket]
 
 # --------------------------------------------------
-# TABLE + PAGINATION
+# TABLE CONTAINER (BEST UX)
 # --------------------------------------------------
-ROWS_PER_PAGE=10
+table_container = st.container()
 
-filtered_df = (
-    details_df[details_df["weeklyBucket"] == db_bucket]
-    [["ReferenceDate","SiteCode", "SiteName", "Date"]]
-    .reset_index(drop=True)
-)
+with table_container:
 
-# Convert timestamp to date only
-filtered_df["ReferenceDate"] = pd.to_datetime(
-    filtered_df["ReferenceDate"], unit="s", utc=True
-).dt.date
+    ROWS_PER_PAGE=10
 
-# Convert timestamp to date only
-filtered_df["Date"] = pd.to_datetime(
-    filtered_df["Date"], unit="s", utc=True
-).dt.date
+    filtered_df = (
+        details_df[details_df["weeklyBucket"] == db_bucket]
+        [["smSiteCode", "smSiteName"]]
+        .reset_index(drop=True)
+    )
 
-if "page" not in st.session_state:
-    st.session_state.page=1
+    if "page" not in st.session_state:
+        st.session_state.page=1
 
-total_pages=max(1,(len(filtered_df)-1)//ROWS_PER_PAGE+1)
-st.session_state.page=min(st.session_state.page,total_pages)
+    total_pages=max(1,(len(filtered_df)-1)//ROWS_PER_PAGE+1)
 
-start=(st.session_state.page-1)*ROWS_PER_PAGE
-end=start+ROWS_PER_PAGE
-page_df=filtered_df.iloc[start:end]
+    st.session_state.page=min(st.session_state.page,total_pages)
 
-st.dataframe(page_df,use_container_width=True,hide_index=True)
+    start=(st.session_state.page-1)*ROWS_PER_PAGE
+    end=start+ROWS_PER_PAGE
 
-left,center,right=st.columns([3,2,3])
+    page_df=filtered_df.iloc[start:end]
 
-with center:
-    c1,c2,c3=st.columns([1,2,1])
+    st.dataframe(page_df,use_container_width=True,hide_index=True)
 
-    with c1:
-        if st.button("⬅ Prev",use_container_width=True):
-            if st.session_state.page>1:
-                st.session_state.page-=1
+    left,center,right=st.columns([3,2,3])
 
-    with c2:
-        st.markdown(
-            f'<div style="text-align:center;font-weight:600;padding-top:6px;font-size:13px;">Page {st.session_state.page} / {total_pages}</div>',
-            unsafe_allow_html=True,
-        )
+    with center:
 
-    with c3:
-        if st.button("Next ➡",use_container_width=True):
-            if st.session_state.page<total_pages:
-                st.session_state.page+=1
+        c1,c2,c3=st.columns([1,2,1])
+
+        with c1:
+            if st.button("⬅ Prev",use_container_width=True):
+                if st.session_state.page>1:
+                    st.session_state.page-=1
+                    st.rerun()
+
+        with c2:
+            st.markdown(
+                f'<div style="text-align:center;font-weight:600;padding-top:6px;font-size:13px;">Page {st.session_state.page} / {total_pages}</div>',
+                unsafe_allow_html=True,
+            )
+
+        with c3:
+            if st.button("Next ➡",use_container_width=True):
+                if st.session_state.page<total_pages:
+                    st.session_state.page+=1
+                    st.rerun()
