@@ -39,7 +39,7 @@ st.markdown("""
 }
 
 .block-container{
-    padding-top:0.6rem;
+    padding-top:1.5rem;
     padding-bottom:0.2rem;
     max-width:96%;
 }
