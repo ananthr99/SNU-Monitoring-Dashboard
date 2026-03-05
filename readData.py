@@ -16,7 +16,12 @@ def getAgingBucketCounts(reference_ts):
 
 def getAgingBucketDetails(reference_ts):
     query = text("""
-        SELECT *
+        SELECT
+            refTimeStamp as ReferenceDate,
+            smSiteCode as SiteCode,
+            smSiteName as SiteName,
+            recTimeStamp as Date,
+            weeklyBucket
         FROM cube_sitenotupdatingbucketdetails
         WHERE refTimeStamp = :ref_date
     """)

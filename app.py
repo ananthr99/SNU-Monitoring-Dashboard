@@ -328,11 +328,21 @@ db_bucket = reverse_bucket_map[selected_bucket]
 # --------------------------------------------------
 ROWS_PER_PAGE=10
 
-filtered_df=(
-    details_df[details_df["weeklyBucket"]==db_bucket]
-    [["smSiteCode","smSiteName"]]
+filtered_df = (
+    details_df[details_df["weeklyBucket"] == db_bucket]
+    [["ReferenceDate","SiteCode", "SiteName", "Date"]]
     .reset_index(drop=True)
 )
+
+# Convert timestamp to date only
+filtered_df["ReferenceDate"] = pd.to_datetime(
+    filtered_df["ReferenceDate"], unit="s", utc=True
+).dt.date
+
+# Convert timestamp to date only
+filtered_df["Date"] = pd.to_datetime(
+    filtered_df["Date"], unit="s", utc=True
+).dt.date
 
 if "page" not in st.session_state:
     st.session_state.page=1
