@@ -4,14 +4,8 @@ warnings.simplefilter("ignore")
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-
-from createData import initialize_views
-from readData import (
-    get_daily_counts,
-    get_weekly_counts,
-    get_daily_details,
-    get_weekly_details,
-)
+from datetime import datetime, timezone
+from readData import (getAgingBucketCounts,getAgingBucketDetails)
 
 # --------------------------------------------------
 # GLOBAL PLOTLY CONFIG
@@ -24,15 +18,6 @@ PLOTLY_CONFIG = {
     ],
 }
 
-# --------------------------------------------------
-# BOOTSTRAP
-# --------------------------------------------------
-@st.cache_resource
-def bootstrap_project():
-    initialize_views()
-    return True
-
-bootstrap_project()
 
 # --------------------------------------------------
 # PAGE CONFIG
@@ -180,25 +165,27 @@ with top_col2:
 if not selected_date:
     st.stop()
 
-selected_date_str = str(selected_date)
+reference_ts = int(
+    datetime(
+        selected_date.year,
+        selected_date.month,
+        selected_date.day,
+        tzinfo=timezone.utc
+    ).timestamp()
+)
+# selected_date_str = str(selected_date)
 
 # --------------------------------------------------
 # LOAD DATA
 # --------------------------------------------------
 with st.spinner("Loading site aging data..."):
-    daily_counts_df = get_daily_counts(selected_date_str)
-    weekly_counts_df = get_weekly_counts(selected_date_str)
-    daily_details_df = get_daily_details(selected_date_str)
-    weekly_details_df = get_weekly_details(selected_date_str)
+    counts_df = getAgingBucketCounts(reference_ts)
+    details_df = getAgingBucketDetails(reference_ts)
 
 def is_empty(df):
     return df is None or df.empty
 
-if (
-    is_empty(daily_counts_df)
-    or is_empty(weekly_counts_df)
-    or is_empty(weekly_details_df)
-):
+if (is_empty(counts_df) or is_empty(details_df)):
     st.markdown(
         '<div class="card" style="text-align:center;font-size:18px;font-weight:600;">No data available for the selected date.</div>',
         unsafe_allow_html=True,
@@ -208,26 +195,26 @@ if (
 # --------------------------------------------------
 # TRANSFORM DATA
 # --------------------------------------------------
-daily_counts_df = daily_counts_df.melt(
-    id_vars=["ref_date"],
+daily_counts_df = counts_df.melt(
+    id_vars=["refTimeStamp"],
     value_vars=["day1","day2","day3","day4","day5","day6","day7"],
     var_name="aging_bucket",
     value_name="sitecount",
 )
 
-weekly_counts_df = weekly_counts_df.melt(
-    id_vars=["ref_date"],
-    value_vars=["w1","w2","w3","w4","w5"],
+weekly_counts_df = counts_df.melt(
+    id_vars=["refTimeStamp"],
+    value_vars=["week1","week2","week3","week4","week5"],
     var_name="aging_bucket",
     value_name="sitecount",
 )
 
 bucket_map={
-    "w1":"<week1",
-    "w2":">week1&<week2",
-    "w3":">week2&<week3",
-    "w4":">week3&<week4",
-    "w5":">week4",
+    "week1":"<week1",
+    "week2":">week1&<week2",
+    "week3":">week2&<week3",
+    "week4":">week3&<week4",
+    "week5":">week4",
 }
 weekly_counts_df["aging_bucket"]=weekly_counts_df["aging_bucket"].map(bucket_map)
 
@@ -326,14 +313,24 @@ st.markdown('</div>', unsafe_allow_html=True)
 
 selected_bucket=st.session_state.selected_bucket
 
+reverse_bucket_map = {
+    "<week1": "week1",
+    ">week1&<week2": "week2",
+    ">week2&<week3": "week3",
+    ">week3&<week4": "week4",
+    ">week4": "week5",
+}
+
+db_bucket = reverse_bucket_map[selected_bucket]
+
 # --------------------------------------------------
 # TABLE + PAGINATION
 # --------------------------------------------------
 ROWS_PER_PAGE=10
 
 filtered_df=(
-    weekly_details_df[weekly_details_df["aging_bucket"]==selected_bucket]
-    [["smsitecode","smsitename"]]
+    details_df[details_df["weeklyBucket"]==db_bucket]
+    [["smSiteCode","smSiteName"]]
     .reset_index(drop=True)
 )
 
