@@ -5,7 +5,14 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime, timezone
-from readData import (getAgingBucketCounts,getAgingBucketDetails)
+from readData import (
+    getSNUAgingBucketCounts,getSNUAgingBucketDetails,
+    getBattCntrlAgingBucketCounts,getBattCntrlAgingBucketDetails,
+    getDGCntrlAgingBucketCounts,getDGCntrlAgingBucketDetails,
+    getFuelAgingBucketCounts,getFuelAgingBucketDetails,
+    getRectCntrlAgingBucketCounts,getRectCntrlAgingBucketDetails,
+    getSolarAgingBucketCounts,getSolarAgingBucketDetails
+)
 
 # --------------------------------------------------
 # GLOBAL PLOTLY CONFIG
@@ -71,7 +78,7 @@ st.markdown("""
 # --------------------------------------------------
 # HEADER
 # --------------------------------------------------
-top_col1, top_col2 = st.columns([3,1])
+top_col1, top_col2, top_col3 = st.columns([3,1,1])
 
 with top_col1:
     st.markdown("""
@@ -95,16 +102,50 @@ reference_ts = int(
     ).timestamp()
 )
 
+with top_col3:
+    selected_equipment = st.selectbox(
+        "Equipment",
+        [
+            "SNU",
+            "DG Controller",
+            "Rectifier Controller",
+            "Battery Controller",
+            "Fuel",
+            "Solar"
+        ]
+    )
+
+# -------------------------------------------
+# RESET PAGINATION WHEN EQUIPMENT CHANGES
+# -------------------------------------------
+if "prev_equipment" not in st.session_state:
+    st.session_state.prev_equipment = selected_equipment
+
+if st.session_state.prev_equipment != selected_equipment:
+    st.session_state.page = 1
+    st.session_state.selected_bucket = "<week1"
+    st.session_state.prev_equipment = selected_equipment
+
 # --------------------------------------------------
 # DATA LOADING
 # --------------------------------------------------
+EQUIPMENT_FUNCTION_MAP = {
+    "SNU":(getSNUAgingBucketCounts,getSNUAgingBucketDetails),
+    "DG Controller":(getDGCntrlAgingBucketCounts,getDGCntrlAgingBucketDetails),
+    "Rectifier Controller":(getRectCntrlAgingBucketCounts,getRectCntrlAgingBucketDetails),
+    "Battery Controller":(getBattCntrlAgingBucketCounts,getBattCntrlAgingBucketDetails),
+    "Fuel":(getFuelAgingBucketCounts,getFuelAgingBucketDetails),
+    "Solar":(getSolarAgingBucketCounts,getSolarAgingBucketDetails)
+}
+
 @st.cache_data
-def load_data(reference_ts):
-    counts = getAgingBucketCounts(reference_ts)
-    details = getAgingBucketDetails(reference_ts)
+def load_data(reference_ts,equipment):
+    count_func, detail_func = EQUIPMENT_FUNCTION_MAP[equipment]
+    counts = count_func(reference_ts)
+    details = detail_func(reference_ts)
     return counts, details
 
-counts_df, details_df = load_data(reference_ts)
+counts_df, details_df = load_data(reference_ts,selected_equipment)
 
 if counts_df.empty or details_df.empty:
     st.markdown(
@@ -117,14 +158,14 @@ if counts_df.empty or details_df.empty:
 # DATA TRANSFORM
 # --------------------------------------------------
 daily_counts_df = counts_df.melt(
-    id_vars=["refTimeStamp"],
+    id_vars=["recTimeStamp"],
     value_vars=["day1","day2","day3","day4","day5","day6","day7"],
     var_name="aging_bucket",
     value_name="sitecount",
 )
 
 weekly_counts_df = counts_df.melt(
-    id_vars=["refTimeStamp"],
+    id_vars=["recTimeStamp"],
     value_vars=["week1","week2","week3","week4","week5"],
     var_name="aging_bucket",
     value_name="sitecount",
@@ -142,12 +183,25 @@ weekly_counts_df["aging_bucket"]=weekly_counts_df["aging_bucket"].map(bucket_map
 
 bucket_order=["<week1",">week1&<week2",">week2&<week3",">week3&<week4",">week4"]
 
+st.markdown(f"""
+<div style="
+    font-size:24px;
+    font-weight:600;
+    margin-top:10px;
+    margin-bottom:10px;
+">{selected_equipment}</div>
+""", unsafe_allow_html=True)
+
 # --------------------------------------------------
 # CHARTS
 # --------------------------------------------------
 c1,c2 = st.columns(2)
 
 with c1:
+    st.markdown(
+        '<div class="section-title">Daily Data</div>',
+        unsafe_allow_html=True
+    )
 
     fig1 = go.Figure()
 
@@ -174,6 +228,10 @@ with c1:
     st.plotly_chart(fig1,use_container_width=True,config=PLOTLY_CONFIG)
 
 with c2:
+    st.markdown(
+        '<div class="section-title">Weekly Data</div>',
+        unsafe_allow_html=True
+    )
 
     fig2 = go.Figure()
 
@@ -248,7 +306,7 @@ with table_container:
 
     filtered_df = (
         details_df[details_df["weeklyBucket"] == db_bucket]
-        [["smSiteCode", "smSiteName"]]
+        [["smSiteCode", "smSiteName","daysCount", "hoursCount"]]
         .reset_index(drop=True)
     )
 
